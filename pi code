@@ -1,6 +1,4 @@
-// Serial pins mapped to the ESP-01S
-const int TX_PIN = 0;
-const int RX_PIN = 1;
+// --- TETHERED USB KIWI DRIVE RECEIVER ---
 
 // Motor 1 (Wheel 1)
 const int PWM_1 = 2; const int DIR_1A = 3; const int DIR_1B = 4;
@@ -10,35 +8,35 @@ const int PWM_2 = 5; const int DIR_2A = 6; const int DIR_2B = 7;
 const int PWM_3 = 8; const int DIR_3A = 9; const int DIR_3B = 10;
 
 void setup() {
-  Serial.begin(115200); // For USB debugging
+  // Start USB serial communication with the laptop
+  // Must match the baud rate in the Python script!
+  Serial.begin(115200); 
   
-  // Setup communication with ESP-01S
-  Serial1.setRX(RX_PIN);
-  Serial1.setTX(TX_PIN);
-  Serial1.begin(115200);
-
-  // Initialize motor pins
+  // Initialize motor pins as outputs
   pinMode(PWM_1, OUTPUT); pinMode(DIR_1A, OUTPUT); pinMode(DIR_1B, OUTPUT);
   pinMode(PWM_2, OUTPUT); pinMode(DIR_2A, OUTPUT); pinMode(DIR_2B, OUTPUT);
   pinMode(PWM_3, OUTPUT); pinMode(DIR_3A, OUTPUT); pinMode(DIR_3B, OUTPUT);
   
-  // Ensure all motors start stopped
+  // Ensure all motors start perfectly stopped for safety
   analogWrite(PWM_1, 0); analogWrite(PWM_2, 0); analogWrite(PWM_3, 0);
 }
 
 void loop() {
-  // We expect a 9-byte packet: 'W', 'I', 'Z', D1, S1, D2, S2, D3, S3
-  if (Serial1.available() >= 9) {
+  // We expect a 9-byte packet over the USB cable: 
+  // 'W', 'I', 'Z', Dir1, Spd1, Dir2, Spd2, Dir3, Spd3
+  
+  // Listen to the main USB cable (Serial)
+  if (Serial.available() >= 9) {
     
-    // Check for the "WIZ" header
-    if (Serial1.read() == 'W') {
-      if (Serial1.read() == 'I') {
-        if (Serial1.read() == 'Z') {
+    // Check for our custom "WIZ" security header
+    if (Serial.read() == 'W') {
+      if (Serial.read() == 'I') {
+        if (Serial.read() == 'Z') {
           
-          // Read the motor commands
-          int d1 = Serial1.read(); int s1 = Serial1.read();
-          int d2 = Serial1.read(); int s2 = Serial1.read();
-          int d3 = Serial1.read(); int s3 = Serial1.read();
+          // Header verified! Read the actual motor commands
+          int d1 = Serial.read(); int s1 = Serial.read();
+          int d2 = Serial.read(); int s2 = Serial.read();
+          int d3 = Serial.read(); int s3 = Serial.read();
 
           // Apply to Motor 1
           digitalWrite(DIR_1A, d1 == 1 ? HIGH : LOW);
