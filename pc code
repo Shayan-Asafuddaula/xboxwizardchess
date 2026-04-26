@@ -1,15 +1,10 @@
 import pygame
-import socket
+import serial
 import struct
 import math
 
-# --- CONFIGURATION ---
-ESP_IP = "192.168.1.XXX" # CHANGE THIS to your ESP-01S's IP address!
-UDP_PORT = 12345
-
-# Set up UDP socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
+# CHANGE 'COM4' to whatever port your Pico is plugged into!
+pico_serial = serial.Serial('COM4', 115200)
 # Initialize Pygame and Joystick
 pygame.init()
 pygame.joystick.init()
