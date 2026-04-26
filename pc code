@@ -1,69 +1,78 @@
 import pygame
 import serial
 import struct
-import math
+import time
 
-# CHANGE 'COM4' to whatever port your Pico is plugged into!
-pico_serial = serial.Serial('COM4', 115200)
-# Initialize Pygame and Joystick
+# --- SETUP ---
+print("Connecting to robot on COM4...")
+# If this crashes, make sure the Arduino IDE Serial Monitor is CLOSED!
+pico_serial = serial.Serial('COM4', 115200) 
+print("Connected!")
+
 pygame.init()
 pygame.joystick.init()
 
 if pygame.joystick.get_count() == 0:
-    print("No Xbox controller detected! Please plug one in.")
+    print("ERROR: No Xbox controller detected! Please connect one.")
     exit()
 
-controller = pygame.joystick.Joystick(0)
-controller.init()
-print(f"Connected to: {controller.get_name()}")
+joystick = pygame.joystick.Joystick(0)
+joystick.init()
+print(f"Controller Connected: {joystick.get_name()}")
 
 def send_motor_command(m1_speed, m2_speed, m3_speed):
+    # Determine direction (1 for forward/positive, 0 for reverse/negative)
     d1 = 1 if m1_speed >= 0 else 0
     d2 = 1 if m2_speed >= 0 else 0
     d3 = 1 if m3_speed >= 0 else 0
 
-    MAX_PWM = 93 # Our 200 RPM speed governor
-
+    # Scale the speed to a PWM value (0 to 255)
+    # Our max PWM is set to 93 to govern the speed safely!
+    MAX_PWM = 93 
+    
     s1 = min(MAX_PWM, int(abs(m1_speed) * MAX_PWM))
     s2 = min(MAX_PWM, int(abs(m2_speed) * MAX_PWM))
     s3 = min(MAX_PWM, int(abs(m3_speed) * MAX_PWM))
 
+    # Pack the data into our 9-byte structure: 'W' 'I' 'Z', dir1, spd1, dir2, spd2, dir3, spd3
     packet = struct.pack('3sBBBBBB', b'WIZ', d1, s1, d2, s2, d3, s3)
-    pico_serial.write(packet) # Send over USB!
+    pico_serial.write(packet)
 
-print("Ready to drive! Press CTRL+C to quit.")
-
+# --- MAIN DRIVE LOOP ---
+print("Ready to drive! Press CTRL+C in the terminal to stop.")
 try:
     while True:
-        pygame.event.pump() # Update controller state
+        pygame.event.pump() # Update controller readings
 
-        # Read Left Stick (X/Y Translation) and Right Stick X (Rotation)
-        # Note: Pygame joysticks return values from -1.0 to 1.0
-        joy_x = controller.get_axis(0) 
-        joy_y = controller.get_axis(1) * -1 # Invert Y so up is positive
-        joy_z = controller.get_axis(3) # Right stick horizontal for spin
+        # Get the Left Joystick values (typically Axis 0 for X, Axis 1 for Y)
+        # Note: Pygame Y-axis is inverted (down is positive). We negate it so UP is positive.
+        x_axis = joystick.get_axis(0) 
+        y_axis = -joystick.get_axis(1) 
+        
+        # Get the Right Joystick X value for rotation (spinning in place)
+        spin = joystick.get_axis(2) # Sometimes Axis 3 or 4 depending on OS/Controller
 
-        # Add a small deadzone to stop stick drift
-        if abs(joy_x) < 0.1: joy_x = 0
-        if abs(joy_y) < 0.1: joy_y = 0
-        if abs(joy_z) < 0.1: joy_z = 0
+        # Add a small "deadzone" so the motors don't whine when you let go of the sticks
+        if abs(x_axis) < 0.1: x_axis = 0
+        if abs(y_axis) < 0.1: y_axis = 0
+        if abs(spin) < 0.1: spin = 0
 
-        # --- KIWI DRIVE KINEMATICS MATRIX ---
-        # Assuming wheels are placed at 150 deg, 30 deg, and 270 deg
-        m1 = -0.5 * joy_x - (math.sqrt(3)/2) * joy_y + joy_z
-        m2 = -0.5 * joy_x + (math.sqrt(3)/2) * joy_y + joy_z
-        m3 = joy_x + joy_z
+        # --- HOLONOMIC KIWI DRIVE MATH ---
+        # This mixes the X, Y, and Spin inputs to calculate the speed of each wheel
+        m1 = -x_axis + spin
+        m2 = (0.5 * x_axis) - (0.866 * y_axis) + spin
+        m3 = (0.5 * x_axis) + (0.866 * y_axis) + spin
 
-        # Normalize the speeds so we don't exceed 1.0 (100% PWM)
-        max_val = max(abs(m1), abs(m2), abs(m3), 1.0)
-        m1 /= max_val
-        m2 /= max_val
-        m3 /= max_val
-
+        # Send it to the Pico!
         send_motor_command(m1, m2, m3)
-        pygame.time.wait(50) # Send commands at 20Hz
+
+        # Run at ~20 frames per second to not overwhelm the USB cable
+        time.sleep(0.05) 
 
 except KeyboardInterrupt:
-    print("Stopping...")
-    send_motor_command(0, 0, 0) # Send a final stop command
+    # If you stop the script, send a final command to stop the motors!
+    print("\nStopping motors...")
+    send_motor_command(0, 0, 0)
+    pico_serial.close()
     pygame.quit()
+    print("Shutdown complete.")
