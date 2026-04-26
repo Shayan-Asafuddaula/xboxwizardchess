@@ -28,10 +28,16 @@ def send_motor_command(m1_speed, m2_speed, m3_speed):
     d2 = 1 if m2_speed >= 0 else 0
     d3 = 1 if m3_speed >= 0 else 0
 
-    # Convert speeds to absolute bytes (0-255)
-    s1 = min(255, int(abs(m1_speed) * 255))
-    s2 = min(255, int(abs(m2_speed) * 255))
-    s3 = min(255, int(abs(m3_speed) * 255))
+    # --- THE SPEED GOVERNOR ---
+    # Calculate the max PWM allowed for 200 RPM on a 550 RPM motor
+    MAX_TARGET_RPM = 200
+    ACTUAL_MOTOR_RPM = 550
+    MAX_PWM = int(255 * (MAX_TARGET_RPM / ACTUAL_MOTOR_RPM)) # Equals roughly 92
+
+    # Scale the joystick's 0.0-1.0 input to our new reduced max PWM limit
+    s1 = min(MAX_PWM, int(abs(m1_speed) * MAX_PWM))
+    s2 = min(MAX_PWM, int(abs(m2_speed) * MAX_PWM))
+    s3 = min(MAX_PWM, int(abs(m3_speed) * MAX_PWM))
 
     # Packet Format: 'W', 'I', 'Z', Dir1, Spd1, Dir2, Spd2, Dir3, Spd3
     packet = struct.pack('3sBBBBBB', b'WIZ', d1, s1, d2, s2, d3, s3)
